@@ -60,7 +60,7 @@ Include "mymodule.f03"
 !
 !
       write(IOut,1000)
-      call setDEBUG(.false.)
+      call setDEBUG(.true.)
 !
 !     Get the name of the two matrix files.
 !
@@ -219,6 +219,14 @@ Include "mymodule.f03"
 !     Form the vector of overlaps <0|k>.
 !
       ALLOCATE(overlapIntegrals0k(nDets))
+
+!      overlapIntegrals0k(1) = singles_hf_overlap(8,  &
+!        10,nBasis1,nOccAlpha1,nOccBeta1,  &
+!        nOccAlpha2,nOccBeta2,MOCoefficientsAlpha1,MOCoefficientsBeta1,  &
+!        MOCoefficientsAlpha2,MOCoefficientsBeta2,SMatrixAO)
+!      write(iOut,*)' Hrant - STOP!'
+!      goto 999
+
       do i = 1,nDets
         overlapIntegrals0k(i) = singles_hf_overlap(determinantList(1,i),  &
           determinantList(2,i),nBasis1,nOccAlpha1,nOccBeta1,  &
