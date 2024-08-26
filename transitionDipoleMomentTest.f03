@@ -27,6 +27,8 @@ Include "mymodule.f03"
         nBeta2,nBasisUse1,nBasisUse2,nOccAlpha1,nOccBeta1,nVirtAlpha1,  &
         nVirtBeta1,nOccAlpha2,nOccBeta2,nVirtAlpha2,nVirtBeta2,nDets
       integer,dimension(:,:),allocatable::determinantList
+      real(kind=real64)::scfEnergy1,scfEnergy2,deltaSCFEnergy,  &
+        transitionDipoleStrength,oscillatorStrength
       real(kind=real64),dimension(3)::transitionDipoleMoment
       real(kind=real64),dimension(:),allocatable::dipoleIntegrals0kX,  &
         dipoleIntegrals0kY,dipoleIntegrals0kZ,overlapIntegrals0k
@@ -42,13 +44,23 @@ Include "mymodule.f03"
  1010 Format(1x,'Matrix File 1: ',A)
  1011 Format(1x,'Matrix File 2: ',A,/)
  1100 format(1x,'File ',i1,': nBasis=',i4,'  nElectrons=',i4,'  nAlphaEl=',i4,'  nBetaEl=',i4)
+ 1200 Format(/,1x,'SCF Energies',/,  &
+        3x,'SCF 1:     ',F15.8,' a.u.',/,  &
+        3x,'SCF 2:     ',F15.8,' a.u.',/,  &
+        3x,'Delta-SCF: ',F15.8,' a.u.',2x,'=',2x,F15.8,' eV',/,  &
+        36x,'=',2x,F15.8,' cm^-1',/,  &
+        36x,'=',2x,F15.8,' nm')
+ 1500 format(/,1x,'Number of Singles Determinants: ',i10)
  5000 format(/,1x,80('-'),/,34x,'Integral Summary',/,  &
         6x,'i --> a',24x,'<0|r|i->a>',19x,'<k|Psi2>',/,1x,80('-'))
  5100 format(4x,i3,' --> ',i3,5x,3(5x,f8.5),8x,f8.5)
  5200 format(1x,80('-'),/)
+ 5500 format(/,1x,'Transition Dipole Stength: ',f8.5,' a.u.',  &
+        3x,'Oscillator Strength: ',f8.5,' a.u.')
 !
 !
       write(IOut,1000)
+      call setDEBUG(.false.)
 !
 !     Get the name of the two matrix files.
 !
@@ -75,7 +87,15 @@ Include "mymodule.f03"
       nAlpha2 = GMatrixFile2%getVal('nAlpha')
       nBeta2  = GMatrixFile2%getVal('nBeta')
       write(iOut,1100) 2,nBasis2,nAlpha2+nBeta2,nAlpha2,nBeta2
-      write(iOut,*)
+!
+!     Get the SCF energies from the two jobs and report them.
+!
+      scfEnergy1 = GMatrixFile1%getValReal('scfEnergy')
+      scfEnergy2 = GMatrixFile2%getValReal('scfEnergy')
+      deltaSCFEnergy = scfEnergy2-scfEnergy1
+      write(iOut,1200) scfEnergy1,scfEnergy2,deltaSCFEnergy,  &
+        deltaSCFEnergy*evPHartree,deltaSCFEnergy*cmM1PHartree,  &
+        deltaSCFEnergy*evPHartree*nmPev
 !
 !     Figure out the number of occupied and virtual MOs for each determinant.
 !
@@ -93,6 +113,7 @@ Include "mymodule.f03"
 !     here is a simple pair based swap list.
 !
       nDets = nOccAlpha1*nVirtAlpha1+nOccBeta1*nVirtBeta1+1
+      write(iOut,1500) nDets
       ALLOCATE(determinantList(2,nDets))
       determinantList = 0
       k = 1
@@ -110,13 +131,7 @@ Include "mymodule.f03"
           determinantList(2,k) = -j
         endDo
       endDo
-      write(*,*)
-      write(*,*)
-      write(*,*)' Hrant - k     = ',k
-      write(*,*)' Hrant - nDets = ',nDets
-      write(*,*)
-      write(*,*)
-      call mqc_print(TRANSPOSE(determinantList),iOut,header='determinant list:')
+      call mqc_print(TRANSPOSE(determinantList),iOut,header='determinant list:',blank_at_top=.true.)
 !
 !     Pick up the MO coefficient matrices, the overlap matrix, and the AO dipole
 !     integral matrix.
@@ -135,10 +150,14 @@ Include "mymodule.f03"
         MOCoefficientsBeta1 = MOCoefficientsAlpha1
       endIf
       PMatrixTotal1 = PMatrixAlpha1+PMatrixBeta1
+      if(DEBUG) then
+        call MOCoefficientsAlpha1%print(iOut,header='MOCoefficientsAlpha1')
+        call MOCoefficientsBeta1%print(iOut,header='MOCoefficientsBeta1')
+      endIf
 !
       call GMatrixFile2%getArray('ALPHA DENSITY MATRIX',mqcVarOut=PMatrixAlpha2)
       call GMatrixFile2%getArray('ALPHA MO COEFFICIENTS',mqcVarOut=MOCoefficientsAlpha2)
-      if(GMatrixFile1%isUnrestricted()) then
+      if(GMatrixFile2%isUnrestricted()) then
         call GMatrixFile2%getArray('BETA DENSITY MATRIX',mqcVarOut=PMatrixBeta2)
         call GMatrixFile2%getArray('BETA MO COEFFICIENTS',mqcVarOut=MOCoefficientsBeta2)
       else
@@ -146,6 +165,10 @@ Include "mymodule.f03"
         MOCoefficientsBeta2 = MOCoefficientsAlpha2
       endIf
       PMatrixTotal2 = PMatrixAlpha2+PMatrixBeta2
+      if(DEBUG) then
+        call MOCoefficientsAlpha2%print(iOut,header='MOCoefficientsAlpha2')
+        call MOCoefficientsBeta2%print(iOut,header='MOCoefficientsBeta2')
+      endIf
 !
 !     Form the dipole vector for each <0|r|k> where the kets |k> are the
 !     substitued determinants in determinantList.
@@ -212,13 +235,17 @@ Include "mymodule.f03"
       endDo
       write(iOut,5200)
 !
-!     Put things together to get the final transition dipole moment vector.
+!     Put things together to get the final transition dipole moment vector and
+!     oscillator strength.
 !
       transitionDipoleMoment(1) = dot_product(dipoleIntegrals0kX,overlapIntegrals0k)
       transitionDipoleMoment(2) = dot_product(dipoleIntegrals0kY,overlapIntegrals0k)
       transitionDipoleMoment(3) = dot_product(dipoleIntegrals0kZ,overlapIntegrals0k)
       call mqc_print(transitionDipoleMoment,iOut,header='Transition Dipole Moment',  &
         blank_at_top=.true.)
+      transitionDipoleStrength = dot_product(transitionDipoleMoment,transitionDipoleMoment)
+      oscillatorStrength = (float(2)*deltaSCFEnergy/float(3))*transitionDipoleStrength
+      write(iOut,5500) transitionDipoleStrength,oscillatorStrength
 !
  999  Continue
       end program transitionDipoleMomentTest

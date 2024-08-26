@@ -11,12 +11,28 @@
 !
       implicit none
       integer,parameter::IOut=6
-      logical::DEBUG=.true.
+      logical::DEBUG=.false.
 !
 !
 !     Module Procedures...
 !
       CONTAINS
+!
+!PROCEDURE setDEBUG
+      subroutine setDEBUG(newDEBUG)
+!
+!     This routine is used to set the global DEBUG variable/flag in this module.
+!     It is defaulted in the variable declaration at the top of the module.
+!
+      implicit none
+      logical,intent(in)::newDEBUG
+!
+      DEBUG = newDEBUG
+!
+      return
+      end subroutine setDEBUG
+
+
 !
 !PROCEDURE Singles_HF_Overlap
       function singles_hf_overlap(i,a,nBasis,nOccAlpha1,nOccBeta1,  &
@@ -41,6 +57,7 @@
       if(i.gt.0.and.a.gt.0) call MQC_Variable_MatrixPermuteColumns(tmpMatrix1,i,a) 
       tmpMatrix2 = MatMul(Transpose(tmpMatrix1%subMatrix([1,nBasis],[1,NOccAlpha1])),  &
         MatMul(overlapMatrix,CMatrixAlpha2%subMatrix([1,nBasis],[1,NOccAlpha2])))
+      if(DEBUG) call tmpMatrix2%print(iOut,header='overlap matrix ALPHA')
       overlapAlpha = tmpMatrix2%det()
 !
 !     Compute the beta component.
@@ -50,6 +67,7 @@
         call MQC_Variable_MatrixPermuteColumns(tmpMatrix1,-i,-a) 
       tmpMatrix2 = MatMul(Transpose(tmpMatrix1%subMatrix([1,nBasis],[1,NOccBeta1])),  &
         MatMul(overlapMatrix,CMatrixBeta2%subMatrix([1,nBasis],[1,NOccBeta2])))
+      if(DEBUG) call tmpMatrix2%print(iOut,header='overlap matrix BETA')
       overlapBeta = tmpMatrix2%det()
 !
       overlapValue = overlapAlpha*overlapBeta
